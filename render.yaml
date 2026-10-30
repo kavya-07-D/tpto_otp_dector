@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: secureotp-auth
+    runtime: python
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: python -m gunicorn backend.main:app
+    plan: free
+    envVars:
+      - key: LOGIN_KEY
+        value: admin123
+      - key: SECRET_KEY
+        generateValue: true
+      - key: TOTP_SECRET
+        value: JBSWY3DPEHPK3PXP
+      - key: DEMO_MODE
+        value: "true"
+      - key: PYTHON_VERSION
+        value: 3.11.9

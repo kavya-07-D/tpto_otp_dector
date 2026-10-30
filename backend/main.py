@@ -28,7 +28,7 @@ TOTP_SECRET = os.getenv("TOTP_SECRET", "JBSWY3DPEHPK3PXP")
 ESP32_IP = os.getenv("ESP32_IP", "").strip()
 DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() in ("true", "1", "yes")
 APP_HOST = os.getenv("APP_HOST", "0.0.0.0")
-APP_PORT = int(os.getenv("APP_PORT", "5000"))
+APP_PORT = int(os.getenv("PORT", os.getenv("APP_PORT", "5000")))
 
 WEBSITE_DIR = PROJECT_DIR / "website"
 
