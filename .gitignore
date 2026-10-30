@@ -1,0 +1,12 @@
+﻿# Ignore local environment and secret files
+.env
+.env.*
+!backend/.env.example
+!esp32/secrets_config.example.h
+backend/.env
+esp32/secrets_config.h
+**/__pycache__/
+*.pyc
+.venv/
+venv/
+.DS_Store
