@@ -1,1 +1,318 @@
 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ESP32 Time-Based OTP Authentication System</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- ================================================================= -->
+  <!-- 1. LOGIN SCREEN (Visible until successful login) -->
+  <!-- ================================================================= -->
+  <div id="loginScreen" class="auth-screen-wrapper">
+    <div class="auth-card">
+      <div class="brand-header">
+        <div class="brand-badge-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+          </svg>
+        </div>
+        <h1>SecureOTP Portal</h1>
+        <p class="brand-tagline">ESP32 Time-Based Authentication System</p>
+      </div>
+
+      <div class="login-instruction">
+        Please enter your authorization Login Key to access the authentication dashboard.
+      </div>
+
+      <!-- Login Error Alert Banner -->
+      <div id="loginErrorAlert" class="alert-banner alert-danger" style="display: none;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="8" x2="12" y2="12"></line>
+          <line x1="12" y1="16" x2="12.01" y2="16"></line>
+        </svg>
+        <span id="loginErrorText">Incorrect login key. Please try again.</span>
+      </div>
+
+      <form id="loginForm" class="auth-form" onsubmit="return false;">
+        <div class="form-field">
+          <label for="loginKeyInput">Login Key</label>
+          <div class="input-password-wrap">
+            <input 
+              type="password" 
+              id="loginKeyInput" 
+              class="text-input" 
+              placeholder="Enter your login key" 
+              autocomplete="current-password"
+              required
+            >
+            <button type="button" id="toggleLoginKeyVis" class="icon-toggle-btn" aria-label="Toggle password visibility">
+              <svg id="loginKeyEyeIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+            </button>
+          </div>
+          <small class="field-hint">Default development key: <code>admin123</code></small>
+        </div>
+
+        <button type="submit" id="loginSubmitBtn" class="btn btn-primary btn-block">
+          <span>Login to System</span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+            <polyline points="12 5 19 12 12 19"></polyline>
+          </svg>
+        </button>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- ================================================================= -->
+  <!-- 2. MAIN APPLICATION (Gated - Only accessible after login) -->
+  <!-- ================================================================= -->
+  <div id="appScreen" class="app-screen-wrapper" style="display: none;">
+    <!-- Top App Navigation -->
+    <header class="app-header">
+      <div class="header-inner">
+        <div class="header-brand">
+          <div class="brand-mini-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+          </div>
+          <div class="header-titles">
+            <span class="header-main-title">SecureOTP</span>
+            <span class="header-sub-title">ESP32 Hardware Auth</span>
+          </div>
+        </div>
+
+        <!-- Navigation Tabs: OTP Authentication & OTP History -->
+        <nav class="nav-tabs" role="tablist">
+          <button type="button" class="tab-btn active" id="tabAuthBtn" role="tab" aria-selected="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+            OTP Authentication
+          </button>
+          <button type="button" class="tab-btn" id="tabHistoryBtn" role="tab" aria-selected="false">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <polyline points="12 6 12 12 14 14"></polyline>
+            </svg>
+            OTP History
+          </button>
+        </nav>
+
+        <!-- User Logout Action -->
+        <div class="header-user-actions">
+          <button type="button" id="logoutBtn" class="btn btn-secondary btn-sm">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+              <polyline points="16 17 21 12 16 7"></polyline>
+              <line x1="21" y1="12" x2="9" y2="12"></line>
+            </svg>
+            Logout
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Views Container -->
+    <main class="app-main">
+
+      <!-- =============================================================== -->
+      <!-- TAB 1: OTP AUTHENTICATION VIEW -->
+      <!-- =============================================================== -->
+      <section id="authView" class="dashboard-section active">
+        <div class="section-heading">
+          <h2>Time-Based OTP Authentication</h2>
+          <p>Real-time TOTP generation synchronized with the ESP32 embedded controller.</p>
+        </div>
+
+        <div class="cards-layout">
+          <!-- Card 1: OTP Display Panel -->
+          <div class="card otp-display-card">
+            <div class="card-header-row">
+              <span class="card-title-label">Current Authentication Code</span>
+              <!-- Demo Warning Badge -->
+              <span id="otpModeBadge" class="badge badge-warning">DEMO OTP — NOT VALID</span>
+            </div>
+
+            <!-- OTP Digits Container with Subtle Eye Icon -->
+            <div class="otp-view-box">
+              <div class="otp-numbers-wrapper">
+                <span id="otpValueDisplay" class="otp-code-digits">849201</span>
+              </div>
+              
+              <!-- SUBTLE EYE ICON: No tooltip, no descriptive text, looks like a normal visibility toggle -->
+              <button 
+                type="button" 
+                id="eyeToggleBtn" 
+                class="subtle-eye-icon-btn" 
+                aria-label="Toggle display"
+              >
+                <svg id="eyeSvg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                  <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+              </button>
+            </div>
+
+            <!-- Discreet Hardware Notice (e.g. Device unavailable) -->
+            <div id="discreetNotice" class="discreet-notice" style="display: none;">
+              <span id="discreetNoticeText">Device unavailable</span>
+            </div>
+
+            <!-- Live 30-Second Countdown (Visible only when real OTP is active) -->
+            <div id="countdownPanel" class="countdown-panel" style="display: none;">
+              <div class="countdown-text">
+                Code refreshes in: <strong id="secondsLeftText">30</strong> seconds
+              </div>
+              <div class="progress-track">
+                <div id="progressFill" class="progress-bar-fill"></div>
+              </div>
+            </div>
+
+            <div class="card-footer-info">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="16" x2="12" y2="12"></line>
+                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+              </svg>
+              <span>The demo OTP cannot be used for authentication. Real OTP changes every 30 seconds.</span>
+            </div>
+          </div>
+
+          <!-- Card 2: OTP Verification Form -->
+          <div class="card verify-card">
+            <div class="card-header-row">
+              <span class="card-title-label">Verify One-Time Password</span>
+              <span class="badge badge-info">RFC 6238 Standard</span>
+            </div>
+
+            <p class="verify-instructions">
+              Enter the active 6-digit one-time password below to authenticate with the backend server.
+            </p>
+
+            <!-- Verification Outcome Banner -->
+            <div id="verifyResultAlert" class="alert-banner" style="display: none;">
+              <span id="verifyResultIcon"></span>
+              <span id="verifyResultText"></span>
+            </div>
+
+            <form id="verifyForm" class="verify-form" onsubmit="return false;">
+              <div class="form-field">
+                <label for="otpVerifyInput">Enter 6-Digit OTP</label>
+                <input 
+                  type="text" 
+                  id="otpVerifyInput" 
+                  class="text-input otp-input-large" 
+                  placeholder="000000" 
+                  maxlength="6"
+                  inputmode="numeric"
+                  pattern="[0-9]*"
+                  autocomplete="one-time-code"
+                  required
+                >
+              </div>
+
+              <div class="verify-form-actions">
+                <button type="submit" id="verifySubmitBtn" class="btn btn-primary btn-block">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                  </svg>
+                  Verify OTP
+                </button>
+              </div>
+            </form>
+
+            <div class="hardware-cross-note">
+              <strong>Hardware Entry:</strong> You can also enter the OTP directly on the ESP32 4x3 matrix keypad and press <code>#</code> to verify on the physical device LCD.
+            </div>
+          </div>
+        </div>
+      </section>
+
+
+      <!-- =============================================================== -->
+      <!-- TAB 2: OTP HISTORY VIEW -->
+      <!-- =============================================================== -->
+      <section id="historyView" class="dashboard-section" style="display: none;">
+        <div class="section-heading">
+          <h2>Authentication History Log</h2>
+          <p>Audit trail of verification attempts. For security, actual OTP codes and secret keys are never retained.</p>
+        </div>
+
+        <div class="card history-card">
+          <div class="history-card-header">
+            <div class="history-summary">
+              Total Logged Attempts: <strong id="historyCount">0</strong>
+            </div>
+            <button type="button" id="openClearHistoryModalBtn" class="btn btn-outline-danger btn-sm">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              </svg>
+              Clear History
+            </button>
+          </div>
+
+          <!-- History Table Container -->
+          <div class="table-responsive">
+            <table class="history-table">
+              <thead>
+                <tr>
+                  <th style="width: 70px;">#</th>
+                  <th>Date</th>
+                  <th>Time (UTC)</th>
+                  <th>Authentication Result</th>
+                  <th style="width: 140px;">Status</th>
+                </tr>
+              </thead>
+              <tbody id="historyTableBody">
+                <tr class="empty-row">
+                  <td colspan="5">No authentication attempts recorded yet.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ================================================================= -->
+  <!-- Confirmation Modal for Clear History -->
+  <!-- ================================================================= -->
+  <div id="clearHistoryModal" class="modal-backdrop" style="display: none;">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>Confirm Clear History</h3>
+        <button type="button" class="modal-close-btn" id="cancelClearBtn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p>Are you sure you want to permanently clear all authentication attempt history?</p>
+        <p class="modal-sub-note">This action cannot be undone.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="cancelClearActionBtn">Cancel</button>
+        <button type="button" class="btn btn-danger" id="confirmClearActionBtn">Yes, Clear History</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js?v=2.3"></script>
+</body>
+</html>
