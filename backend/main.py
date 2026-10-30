@@ -18,73 +18,109 @@ from dotenv import load_dotenv
 from flask import Flask, request, jsonify, session
 from flask_cors import CORS
 
-# ---------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------
+# =========================================================
+# CONFIGURATION
+# =========================================================
 
 BASE_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = BASE_DIR.parent
 
 load_dotenv(BASE_DIR / ".env")
 
-LOGIN_KEY = os.getenv("LOGIN_KEY", "change-this-login-key")
-SECRET_KEY = os.getenv("SECRET_KEY", "change-this-secret-key")
-TOTP_SECRET = os.getenv("TOTP_SECRET", "JBSWY3DPEHPK3PXP")
+LOGIN_KEY = os.getenv("LOGIN_KEY", "admin123")
+
+SECRET_KEY = os.getenv(
+    "SECRET_KEY",
+    "SecureOTP_2026_Session_Key_Change_In_Production"
+)
+
+TOTP_SECRET = os.getenv(
+    "TOTP_SECRET",
+    "JBSWY3DPEHPK3PXP"
+)
 
 ESP32_IP = os.getenv("ESP32_IP", "").strip()
-DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() in (
-    "true", "1", "yes"
-)
+
+DEMO_MODE = os.getenv(
+    "DEMO_MODE", "false"
+).lower() in ("true", "1", "yes")
 
 APP_HOST = "0.0.0.0"
 APP_PORT = int(os.getenv("PORT", "5000"))
 
-# ---------------------------------------------------------
-# Flask Initialization
-# ---------------------------------------------------------
+# =========================================================
+# FLASK INITIALIZATION
+# =========================================================
 
 app = Flask(__name__)
+
 app.secret_key = SECRET_KEY
 
-# GitHub Pages frontend to Render backend
+# GitHub Pages to Render CORS configuration
 CORS(
     app,
-    origins=["https://kavya-07-d.github.io"],
+    origins=[
+        "https://kavya-07-d.github.io"
+    ],
     supports_credentials=True
 )
 
-# Session cookie settings for cross-origin requests
+# Cross-origin session cookies
 app.config.update(
     SESSION_COOKIE_SAMESITE="None",
     SESSION_COOKIE_SECURE=True,
-    SESSION_COOKIE_HTTPONLY=True
+    SESSION_COOKIE_HTTPONLY=True,
+    PERMANENT_SESSION_LIFETIME=1800
 )
 
-# In-memory history
+# In-memory storage
 history_records = []
 known_fake_otps = set()
 
-# ---------------------------------------------------------
-# Authentication Decorator
-# ---------------------------------------------------------
+# =========================================================
+# AUTHENTICATION DECORATOR
+# =========================================================
 
-def login_required(f):
-    @wraps(f)
+def login_required(function):
+
+    @wraps(function)
     def decorated_function(*args, **kwargs):
+
         if not session.get("authenticated"):
+
             return jsonify({
+                "success": False,
                 "error": "Unauthorized",
-                "message": "Login required."
+                "message": "Please login first."
             }), 401
 
-        return f(*args, **kwargs)
+        return function(*args, **kwargs)
 
     return decorated_function
 
 
-# ---------------------------------------------------------
-# Login and Session Routes
-# ---------------------------------------------------------
+# =========================================================
+# HISTORY HELPER
+# =========================================================
+
+def add_history(date, time_value, result, status):
+
+    history_entry = {
+        "id": int(time.time() * 1000),
+        "date": date,
+        "time": time_value,
+        "result": result,
+        "status": status
+    }
+
+    history_records.insert(0, history_entry)
+
+    del history_records[500:]
+
+
+# =========================================================
+# LOGIN ROUTE
+# =========================================================
 
 @app.route("/api/login", methods=["POST"])
 def api_login():
@@ -96,6 +132,7 @@ def api_login():
     ).strip()
 
     if not key_attempt:
+
         return jsonify({
             "success": False,
             "error": "Login key is required."
@@ -104,6 +141,7 @@ def api_login():
     if key_attempt == LOGIN_KEY:
 
         session.clear()
+        session.permanent = True
         session["authenticated"] = True
 
         return jsonify({
@@ -117,6 +155,10 @@ def api_login():
     }), 401
 
 
+# =========================================================
+# LOGOUT ROUTE
+# =========================================================
+
 @app.route("/api/logout", methods=["POST"])
 def api_logout():
 
@@ -127,6 +169,10 @@ def api_logout():
         "message": "Logged out successfully."
     })
 
+
+# =========================================================
+# SESSION CHECK
+# =========================================================
 
 @app.route("/api/session", methods=["GET"])
 def api_session():
@@ -140,9 +186,9 @@ def api_session():
     })
 
 
-# ---------------------------------------------------------
-# Demo OTP Generation
-# ---------------------------------------------------------
+# =========================================================
+# DEMO OTP GENERATION
+# =========================================================
 
 @app.route("/api/demo-otp", methods=["GET"])
 @login_required
@@ -151,6 +197,7 @@ def api_demo_otp():
     fake_code = f"{random.randint(100000, 999999)}"
 
     known_fake_otps.add(fake_code)
+
     session["last_fake_otp"] = fake_code
 
     return jsonify({
@@ -160,9 +207,9 @@ def api_demo_otp():
     })
 
 
-# ---------------------------------------------------------
-# Real OTP Generation
-# ---------------------------------------------------------
+# =========================================================
+# REAL OTP GENERATION
+# =========================================================
 
 @app.route("/api/real-otp", methods=["GET"])
 @login_required
@@ -178,10 +225,11 @@ def api_real_otp():
 
     remaining = 30 - (now % 30)
 
-    # Try ESP32 hardware first
+    # Check ESP32 hardware
     if ESP32_IP:
 
         try:
+
             esp_url = f"http://{ESP32_IP}/api/otp"
 
             response = requests.get(
@@ -189,13 +237,20 @@ def api_real_otp():
                 timeout=2
             )
 
-            if response.status_code == 200:
+            response.raise_for_status()
 
-                data = response.json()
+            data = response.json()
+
+            device_otp = str(data.get("otp", ""))
+
+            if (
+                len(device_otp) == 6
+                and device_otp.isdigit()
+            ):
 
                 return jsonify({
                     "online": True,
-                    "otp": data.get("otp"),
+                    "otp": device_otp,
                     "time_remaining": data.get(
                         "time_remaining", remaining
                     ),
@@ -204,10 +259,7 @@ def api_real_otp():
                     "message": "ESP32 Connected"
                 })
 
-        except requests.RequestException:
-            pass
-
-        except ValueError:
+        except (requests.RequestException, ValueError):
             pass
 
     # Software TOTP fallback
@@ -221,9 +273,9 @@ def api_real_otp():
     })
 
 
-# ---------------------------------------------------------
-# OTP Verification
-# ---------------------------------------------------------
+# =========================================================
+# OTP VERIFICATION
+# =========================================================
 
 @app.route("/api/verify", methods=["POST"])
 @login_required
@@ -238,9 +290,10 @@ def api_verify():
     now_utc = datetime.now(timezone.utc)
 
     date_str = now_utc.strftime("%Y-%m-%d")
+
     time_str = now_utc.strftime("%H:%M:%S UTC")
 
-    # Reject demo OTP
+    # Reject fake demo OTP
     if (
         candidate_otp in known_fake_otps
         or candidate_otp == session.get("last_fake_otp")
@@ -255,10 +308,10 @@ def api_verify():
 
         return jsonify({
             "valid": False,
-            "message": "Demo OTP cannot be used."
+            "message": "Demo OTP cannot be used for authentication."
         })
 
-    # Validate format
+    # Check OTP format
     if (
         not candidate_otp.isdigit()
         or len(candidate_otp) != 6
@@ -288,49 +341,31 @@ def api_verify():
         valid_window=1
     )
 
-    result = (
+    result_text = (
         "Authentication Successful"
         if is_valid else "Invalid OTP"
     )
 
-    status = "Success" if is_valid else "Failed"
+    status_text = (
+        "Success" if is_valid else "Failed"
+    )
 
     add_history(
         date_str,
         time_str,
-        result,
-        status
+        result_text,
+        status_text
     )
 
     return jsonify({
         "valid": is_valid,
-        "message": result
+        "message": result_text
     })
 
 
-# ---------------------------------------------------------
-# Audit History Helper
-# ---------------------------------------------------------
-
-def add_history(date, time_value, result, status):
-
-    history_entry = {
-        "id": len(history_records) + 1,
-        "date": date,
-        "time": time_value,
-        "result": result,
-        "status": status
-    }
-
-    history_records.insert(0, history_entry)
-
-    # Limit memory usage
-    del history_records[500:]
-
-
-# ---------------------------------------------------------
-# History Routes
-# ---------------------------------------------------------
+# =========================================================
+# HISTORY ROUTE
+# =========================================================
 
 @app.route("/api/history", methods=["GET"])
 @login_required
@@ -341,6 +376,10 @@ def api_get_history():
         "count": len(history_records)
     })
 
+
+# =========================================================
+# CLEAR HISTORY
+# =========================================================
 
 @app.route("/api/clear-history", methods=["POST"])
 @login_required
@@ -354,27 +393,28 @@ def api_clear_history():
     })
 
 
-# ---------------------------------------------------------
-# Health Check
-# ---------------------------------------------------------
+# =========================================================
+# HEALTH CHECK
+# =========================================================
 
 @app.route("/api/health", methods=["GET"])
 def api_health():
 
     return jsonify({
         "status": "running",
-        "service": "SecureOTP Backend"
+        "service": "SecureOTP Backend",
+        "version": "1.0"
     })
 
 
-# ---------------------------------------------------------
-# Run Server
-# ---------------------------------------------------------
+# =========================================================
+# SERVER START
+# =========================================================
 
 if __name__ == "__main__":
 
     print(
-        f"Starting SecureOTP Backend on port {APP_PORT}"
+        f"SecureOTP Backend running on port {APP_PORT}"
     )
 
     app.run(
